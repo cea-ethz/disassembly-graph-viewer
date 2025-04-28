@@ -1,0 +1,29 @@
+{
+  "name": "ifc-viewer",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "AGPL-3.0",
+  "dependencies": {
+    "@types/three": "^0.162.0",
+    "d3": "^7.9.0",
+    "three": "^0.162.0",
+    "three-mesh-bvh": "^0.7.0",
+    "web-ifc": "^0.0.66"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.19",
+    "@vitejs/plugin-vue": "^5.0.4",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.0"
+  }
+}

@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>IFC Viewer</title>
+    <link rel="stylesheet" href="style.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+      integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw=="
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    />
+  </head>
+  <body>
+    <div id="viewer-container">
+      <div id="ifc-viewer-container"></div>
+      <div id="neo4j-viewer-container"></div>
+    </div>
+
+    <div class="loading-overlay">
+      <div class="loading-spinner"></div>
+      <div class="loading-text">Loading...</div>
+    </div>
+
+    <div class="models-panel">
+      <div class="models-header">
+        <h3>Models</h3>
+        <button class="models-toggle">
+          <i class="fas fa-chevron-left"></i>
+        </button>
+      </div>
+      <div class="models-content">
+        <div class="models-actions">
+          <label class="load-model-btn" title="Load IFC Model">
+            <i class="fas fa-plus"></i>
+            <span>Load Model</span>
+            <input type="file" id="file-input" accept=".ifc" />
+          </label>
+        </div>
+        <div id="models-list"></div>
+      </div>
+    </div>
+
+    <div class="settings-panel">
+      <div class="settings-header">
+        <h3>Settings</h3>
+      </div>
+      <div class="settings-content">
+        <div class="setting-item">
+          <label for="grid-toggle">Show Grid</label>
+          <input type="checkbox" id="grid-toggle" />
+        </div>
+        <div class="setting-item">
+          <label for="axes-toggle">Show Axes</label>
+          <input type="checkbox" id="axes-toggle" />
+        </div>
+        <div class="setting-item">
+          <label for="shadows-toggle">Enable Shadows</label>
+          <input type="checkbox" id="shadows-toggle" />
+        </div>
+        <div class="setting-item">
+          <label for="opacity-slider">Model Opacity</label>
+          <input
+            type="range"
+            id="opacity-slider"
+            min="0"
+            max="100"
+            value="100"
+          />
+        </div>
+      </div>
+    </div>
+
+    <div id="ifc-filter-panel">
+      <div class="toggle-panel">
+        <div class="toggle-header">
+          <h3>IFC Filters</h3>
+          <button class="toggle-button">
+            <i class="fas fa-chevron-up"></i>
+          </button>
+        </div>
+        <div class="toggle-content"></div>
+      </div>
+    </div>
+
+    <div id="neo4j-filter-panel">
+      <div class="toggle-panel">
+        <div class="toggle-header">
+          <h3>Graph Filters</h3>
+          <button class="toggle-button">
+            <i class="fas fa-chevron-up"></i>
+          </button>
+        </div>
+        <div class="toggle-content"></div>
+      </div>
+    </div>
+
+    <div id="ifc-properties-panel">
+      <div class="properties-panel">
+        <div class="properties-header">
+          <h3>IFC Properties</h3>
+          <button class="properties-toggle">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+        </div>
+        <div class="properties-content">
+          <div class="no-selection">No element selected</div>
+          <div class="element-info" style="display: none">
+            <div class="property-group">
+              <h4>Element Information</h4>
+              <div id="element-attributes" class="property-list"></div>
+            </div>
+            <div class="property-group">
+              <h4>Properties</h4>
+              <div id="element-properties" class="property-list"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="neo4j-properties-panel">
+      <div class="properties-panel">
+        <div class="properties-header">
+          <h3>Graph Properties</h3>
+          <button class="properties-toggle">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+        </div>
+        <div class="properties-content">
+          <div class="no-selection">No element selected</div>
+          <div class="element-info" style="display: none">
+            <div class="property-group">
+              <h4>Element Information</h4>
+              <div id="element-attributes" class="property-list"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="neo4j-legend-panel">
+      <div class="toggle-panel collapsed">
+        <div class="toggle-header">
+          <h3>Legend</h3>
+          <button class="toggle-button">
+            <i class="fas fa-chevron-up"></i>
+          </button>
+        </div>
+        <div class="toggle-content"></div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/app.ts"></script>
+  </body>
+</html>

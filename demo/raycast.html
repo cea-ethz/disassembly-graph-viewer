@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Animated Raycasting with Intersection Detection</title>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+        background: #f0f0f0;
+      }
+      canvas {
+        display: block;
+      }
+    </style>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.128.0/build/three.module.js",
+          "three/examples/jsm/controls/": "https://unpkg.com/three@0.128.0/examples/jsm/controls/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <script type="module">
+      import * as THREE from "three";
+      import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+
+      // --- Scene Setup ---
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0xf0f0f0);
+
+      const camera = new THREE.PerspectiveCamera(
+        70,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        1000
+      );
+      camera.position.set(0, 2, 8);
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.body.appendChild(renderer.domElement);
+
+      // OrbitControls for user interactivity
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.25;
+      controls.enableZoom = true;
+
+      // --- Lights ---
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+      scene.add(ambientLight);
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+      directionalLight.position.set(5, 10, 5);
+      scene.add(directionalLight);
+
+      // --- Create Cube (Ray Origin) ---
+      const cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
+      const cubeMaterial = new THREE.MeshStandardMaterial({
+        color: 0x81c784,
+        transparent: true,
+        opacity: 0.85,
+      });
+      const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+      cube.position.set(-1.5, 0.5, 0);
+      scene.add(cube);
+
+      // Add black outline to cube
+      const cubeEdges = new THREE.EdgesGeometry(cubeGeometry);
+      const cubeOutline = new THREE.LineSegments(
+        cubeEdges,
+        new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 })
+      );
+      cube.add(cubeOutline);
+
+      // --- Create Sphere (Target) ---
+      const sphereGeometry = new THREE.SphereGeometry(0.5, 32, 32);
+      const sphereMaterial = new THREE.MeshStandardMaterial({
+        color: 0x64b5f6,
+        transparent: true,
+        opacity: 0.85,
+      });
+      const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+      sphere.position.set(1.5, 0.5, 0);
+      scene.add(sphere);
+
+      // --- Draw Rays ---
+      const raysGroup = new THREE.Group();
+      scene.add(raysGroup);
+
+      // Define six principal ray directions with pastel colors
+      const rayDirections = [
+        { dir: new THREE.Vector3(1, 0, 0), color: 0xffeb3b }, // +X: Yellow
+        { dir: new THREE.Vector3(-1, 0, 0), color: 0xff9800 }, // -X: Orange
+        { dir: new THREE.Vector3(0, 1, 0), color: 0xba68c8 }, // +Y: Purple
+        { dir: new THREE.Vector3(0, -1, 0), color: 0xf06292 }, // -Y: Pink
+        { dir: new THREE.Vector3(0, 0, 1), color: 0x4dd0e1 }, // +Z: Cyan
+        { dir: new THREE.Vector3(0, 0, -1), color: 0xe57373 }, // -Z: Reddish
+      ];
+
+      const rayLength = 5;
+      // For each ray direction, draw a line
+      rayDirections.forEach((item) => {
+        const origin = new THREE.Vector3();
+        // Get the cube's center in world coordinates
+        cube.getWorldPosition(origin);
+        const direction = item.dir.clone().normalize();
+        const rayEnd = origin.clone().add(direction.multiplyScalar(rayLength));
+        const rayPoints = [origin, rayEnd];
+        const rayGeometry = new THREE.BufferGeometry().setFromPoints(rayPoints);
+        const rayMaterial = new THREE.LineBasicMaterial({
+          color: item.color,
+          linewidth: 2,
+          transparent: true,
+          opacity: 0.9,
+          depthTest: false,
+        });
+        const rayLine = new THREE.Line(rayGeometry, rayMaterial);
+        raysGroup.add(rayLine);
+      });
+
+      // --- Animated Marker Along the +X Ray ---
+      // We choose the first ray (index 0) which points in the +X direction.
+      // The animated marker will move from the cube center along the +X ray.
+      const animatedRay = rayDirections[0];
+      const animatedOrigin = new THREE.Vector3();
+      cube.getWorldPosition(animatedOrigin);
+      const animatedDirection = animatedRay.dir.clone().normalize();
+      // Create the moving marker as a small sphere with grey color (0x808080)
+      const markerGeometry = new THREE.SphereGeometry(0.1, 16, 16);
+      const markerMaterial = new THREE.MeshBasicMaterial({ color: 0x808080 });
+      const animatedMarker = new THREE.Mesh(markerGeometry, markerMaterial);
+      // Start at the origin
+      animatedMarker.position.copy(animatedOrigin);
+      raysGroup.add(animatedMarker);
+
+      // --- Animation Loop ---
+      const clock = new THREE.Clock();
+      const speed = 1; // units per second
+
+      function animate() {
+        requestAnimationFrame(animate);
+        const elapsed = clock.getElapsedTime();
+        const distanceAlongRay = (elapsed * speed) % rayLength;
+        const newPosition = animatedOrigin
+          .clone()
+          .add(animatedDirection.clone().multiplyScalar(distanceAlongRay));
+        animatedMarker.position.copy(newPosition);
+
+        const sphereCenter = new THREE.Vector3();
+        sphere.getWorldPosition(sphereCenter);
+        const isIntersecting = newPosition.distanceTo(sphereCenter) < 0.5;
+
+        // Handle SPHERE material changes when marker intersects
+        if (isIntersecting) {
+          if (sphereMaterial.opacity !== 0.3) {
+            sphereMaterial.opacity = 0.3; // Make sphere more transparent
+            sphereMaterial.needsUpdate = true;
+          }
+          markerMaterial.color.set(0xff0000); // Make marker red
+        } else {
+          if (sphereMaterial.opacity !== 0.85) {
+            sphereMaterial.opacity = 0.85; // Reset sphere opacity
+            sphereMaterial.needsUpdate = true;
+          }
+          markerMaterial.color.set(0x808080); // Reset marker color
+        }
+
+        controls.update();
+        renderer.render(scene, camera);
+      }
+      animate();
+
+      // --- Handle Window Resize ---
+      window.addEventListener("resize", () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+    </script>
+  </body>
+</html>

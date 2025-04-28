@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Intersection Visualization Demo</title>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+        background: #000;
+      }
+      canvas {
+        display: block;
+      }
+      #info {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        color: #fff;
+        font-family: Arial, sans-serif;
+        font-size: 20px;
+        z-index: 10;
+      }
+    </style>
+    <!-- Import Three.js from ES modules CDN -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="info">Intersection Visualization: Hackathon Demo</div>
+    <!-- Only include GSAP and dat.GUI from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.5/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.7/dat.gui.min.js"></script>
+    <!-- Main script as module to use ES imports -->
+    <script type="module">
+      import * as THREE from "three";
+
+      let scene, camera, renderer;
+      let floor, wall; // our base objects for the linear demo
+      let intersectionGroup; // container for simulated intersection visuals
+
+      // Make THREE available globally if needed by other scripts
+      window.THREE = THREE;
+
+      init();
+      animate();
+
+      function init() {
+        // Create scene and camera
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x000000);
+        camera = new THREE.PerspectiveCamera(
+          45,
+          window.innerWidth / window.innerHeight,
+          0.1,
+          100
+        );
+        camera.position.set(0, 5, 12);
+        camera.lookAt(0, 0, 0);
+
+        // Create renderer
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Lighting
+        const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambient);
+        const directional = new THREE.DirectionalLight(0xffffff, 1);
+        directional.position.set(5, 10, 7.5);
+        scene.add(directional);
+
+        // Create a floor (horizontal plane)
+        const floorGeom = new THREE.PlaneGeometry(10, 10);
+        const floorMat = new THREE.MeshPhongMaterial({
+          color: 0x4444aa,
+          side: THREE.DoubleSide,
+        });
+        floor = new THREE.Mesh(floorGeom, floorMat);
+        floor.rotation.x = -Math.PI / 2;
+        floor.position.y = 0;
+        scene.add(floor);
+
+        // Create a wall (vertical plane) – for the linear demo.
+        const wallGeom = new THREE.PlaneGeometry(10, 5);
+        const wallMat = new THREE.MeshPhongMaterial({
+          color: 0xaa4444,
+          side: THREE.DoubleSide,
+        });
+        wall = new THREE.Mesh(wallGeom, wallMat);
+        // Position the wall so its bottom edge touches the floor.
+        wall.position.set(0, 2.5, -5);
+        scene.add(wall);
+
+        // Add GUI to choose which demo to run
+        const params = {
+          demo: "linear", // options: 'linear', 'triple', 'surface'
+          run: function () {
+            if (intersectionGroup) scene.remove(intersectionGroup);
+            // Clear any existing intersection group.
+            if (params.demo === "linear") {
+              simulateLinearIntersection();
+            } else if (params.demo === "triple") {
+              simulateTripleIntersection();
+            } else if (params.demo === "surface") {
+              simulateSurfaceIntersection();
+            }
+          },
+        };
+        const gui = new dat.GUI();
+        gui
+          .add(params, "demo", ["linear", "triple", "surface"])
+          .name("Demo Mode");
+        gui.add(params, "run").name("Run Simulation");
+
+        window.addEventListener("resize", onWindowResize, false);
+      }
+
+      function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+
+      // -------------------------------
+      // Demo 1: Linear (Edge) Intersection
+      // Two elements (wall and floor) that touch along an edge.
+      function simulateLinearIntersection() {
+        intersectionGroup = new THREE.Group();
+        scene.add(intersectionGroup);
+
+        // Simulate sample points along the bottom edge of the wall.
+        let samplePoints = [];
+        const numSamples = 10;
+        const wallWidth = 10;
+        for (let i = 0; i < numSamples; i++) {
+          const x = -wallWidth / 2 + (wallWidth / (numSamples - 1)) * i;
+          // For the wall, the bottom edge (y = 0) is in contact with the floor at z = -5.
+          const point = new THREE.Vector3(x, 0, -5);
+          samplePoints.push(point);
+
+          // Create a small sphere to represent the intersection sample.
+          const sphereGeom = new THREE.SphereGeometry(0.1, 16, 16);
+          const sphereMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+          const sphere = new THREE.Mesh(sphereGeom, sphereMat);
+          sphere.position.copy(point);
+          sphere.material.transparent = true;
+          sphere.material.opacity = 0;
+          intersectionGroup.add(sphere);
+          gsap.to(sphere.material, {
+            opacity: 1,
+            duration: 0.5,
+            delay: i * 0.1,
+          });
+        }
+
+        // Animate sample rays from each sample point (downward).
+        samplePoints.forEach((pt, idx) => {
+          const origin = pt.clone();
+          const direction = new THREE.Vector3(0, -1, 0);
+          const rayLength = 0.2;
+          const rayGeometry = new THREE.BufferGeometry().setFromPoints([
+            origin,
+            origin.clone().add(direction.multiplyScalar(rayLength)),
+          ]);
+          const rayMaterial = new THREE.LineBasicMaterial({ color: 0x00ff00 });
+          const rayLine = new THREE.Line(rayGeometry, rayMaterial);
+          rayLine.material.transparent = true;
+          rayLine.material.opacity = 0;
+          intersectionGroup.add(rayLine);
+          gsap.to(rayLine.material, {
+            opacity: 1,
+            duration: 0.5,
+            delay: idx * 0.1,
+          });
+        });
+
+        // After a short delay, classify the connection.
+        gsap.delayedCall(2, () => {
+          // For a linear (edge) connection, the sample points are collinear.
+          // Find the two extreme points.
+          let p1 = samplePoints[0],
+            p2 = samplePoints[0],
+            maxDist = 0;
+          for (let i = 0; i < samplePoints.length; i++) {
+            for (let j = i + 1; j < samplePoints.length; j++) {
+              const d = samplePoints[i].distanceTo(samplePoints[j]);
+              if (d > maxDist) {
+                maxDist = d;
+                p1 = samplePoints[i];
+                p2 = samplePoints[j];
+              }
+            }
+          }
+          // Draw a glowing line connecting these extreme points.
+          const lineGeom = new THREE.BufferGeometry().setFromPoints([p1, p2]);
+          const lineMat = new THREE.LineBasicMaterial({
+            color: 0xff00ff,
+            linewidth: 5,
+          });
+          const line = new THREE.Line(lineGeom, lineMat);
+          line.material.transparent = true;
+          line.material.opacity = 0;
+          intersectionGroup.add(line);
+          gsap.to(line.material, { opacity: 1, duration: 1, delay: 0.5 });
+        });
+      }
+
+      // -------------------------------
+      // Demo 2: Triple (Point) Intersection
+      // Three elements (e.g. two walls + floor) meet so that the intersection points cluster.
+      function simulateTripleIntersection() {
+        intersectionGroup = new THREE.Group();
+        scene.add(intersectionGroup);
+
+        // Simulate sample points that nearly coincide.
+        let samplePoints = [];
+        const numSamples = 10;
+        const basePoint = new THREE.Vector3(-5, 0, -5);
+        for (let i = 0; i < numSamples; i++) {
+          // Slight random offset (within 3mm) to mimic a tight cluster.
+          const offset = new THREE.Vector3(
+            (Math.random() - 0.5) * 0.003,
+            (Math.random() - 0.5) * 0.003,
+            (Math.random() - 0.5) * 0.003
+          );
+          const pt = basePoint.clone().add(offset);
+          samplePoints.push(pt);
+
+          const sphereGeom = new THREE.SphereGeometry(0.1, 16, 16);
+          const sphereMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+          const sphere = new THREE.Mesh(sphereGeom, sphereMat);
+          sphere.position.copy(pt);
+          sphere.material.transparent = true;
+          sphere.material.opacity = 0;
+          intersectionGroup.add(sphere);
+          gsap.to(sphere.material, {
+            opacity: 1,
+            duration: 0.5,
+            delay: i * 0.1,
+          });
+        }
+
+        // After a delay, merge the points into a single "connection" point.
+        gsap.delayedCall(2, () => {
+          // All points are within tolerance—display a single glowing point.
+          const mergedPoint = samplePoints[0];
+          const pointGeom = new THREE.BufferGeometry();
+          const posArray = new Float32Array([
+            mergedPoint.x,
+            mergedPoint.y,
+            mergedPoint.z,
+          ]);
+          pointGeom.setAttribute(
+            "position",
+            new THREE.Float32BufferAttribute(posArray, 3)
+          );
+          const pointMat = new THREE.PointsMaterial({
+            color: 0xffaa00,
+            size: 0.3,
+          });
+          const pointCloud = new THREE.Points(pointGeom, pointMat);
+          pointCloud.material.transparent = true;
+          pointCloud.material.opacity = 0;
+          intersectionGroup.add(pointCloud);
+          gsap.to(pointCloud.material, { opacity: 1, duration: 1, delay: 0.5 });
+        });
+      }
+
+      // -------------------------------
+      // Demo 3: Surface Intersection
+      // Two surfaces "touch" over an area – we compute the convex hull to show the contact area.
+      function simulateSurfaceIntersection() {
+        intersectionGroup = new THREE.Group();
+        scene.add(intersectionGroup);
+
+        let samplePoints = [];
+        const numSamples = 20;
+        // Center of the touching area
+        const center = new THREE.Vector3(0, 0, -5);
+        const radius = 0.3; // Spread of the contact area
+        for (let i = 0; i < numSamples; i++) {
+          // Scatter points in a roughly circular area.
+          const angle = Math.random() * Math.PI * 2;
+          const r = radius * (0.5 + Math.random() * 0.5);
+          const x = center.x + r * Math.cos(angle);
+          const y = center.y + r * Math.sin(angle);
+          const pt = new THREE.Vector3(x, y, center.z);
+          samplePoints.push(pt);
+
+          const sphereGeom = new THREE.SphereGeometry(0.1, 16, 16);
+          const sphereMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+          const sphere = new THREE.Mesh(sphereGeom, sphereMat);
+          sphere.position.copy(pt);
+          sphere.material.transparent = true;
+          sphere.material.opacity = 0;
+          intersectionGroup.add(sphere);
+          gsap.to(sphere.material, {
+            opacity: 1,
+            duration: 0.5,
+            delay: i * 0.05,
+          });
+        }
+
+        // After a short delay, compute the convex hull and display the contact surface.
+        gsap.delayedCall(2, () => {
+          // For simplicity, since our points are on a plane (z constant), we compute a 2D convex hull.
+          let points2D = samplePoints.map((pt) => ({
+            x: pt.x,
+            y: pt.y,
+            orig: pt,
+          }));
+          let hull2D = computeConvexHull2D(points2D);
+          if (hull2D.length < 3) return;
+          // Convert hull points back into 3D.
+          const hull3D = hull2D.map(
+            (p) => new THREE.Vector3(p.x, p.y, center.z)
+          );
+          const vertices = [];
+          const indices = [];
+          // Use the first hull point as the fan center.
+          const centerHull = hull3D[0];
+          vertices.push(centerHull.x, centerHull.y, centerHull.z);
+          for (let i = 0; i < hull3D.length; i++) {
+            const pt = hull3D[i];
+            vertices.push(pt.x, pt.y, pt.z);
+            if (i > 0) {
+              indices.push(0, i, i + 1 < hull3D.length ? i + 1 : 1);
+            }
+          }
+          const surfaceGeom = new THREE.BufferGeometry();
+          surfaceGeom.setAttribute(
+            "position",
+            new THREE.Float32BufferAttribute(vertices, 3)
+          );
+          surfaceGeom.setIndex(indices);
+          surfaceGeom.computeVertexNormals();
+          const surfaceMat = new THREE.MeshPhongMaterial({
+            color: 0x8800ff,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.5,
+          });
+          const surfaceMesh = new THREE.Mesh(surfaceGeom, surfaceMat);
+          scene.add(surfaceMesh);
+          gsap.to(surfaceMesh.material, {
+            opacity: 0.8,
+            duration: 1,
+            delay: 0.5,
+          });
+        });
+      }
+
+      // -------------------------------
+      // Simple 2D convex hull algorithm (Andrew's monotone chain)
+      function computeConvexHull2D(points) {
+        if (points.length <= 1) return points.slice();
+        points.sort((a, b) => (a.x === b.x ? a.y - b.y : a.x - b.x));
+        let lower = [];
+        for (let p of points) {
+          while (
+            lower.length >= 2 &&
+            cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0
+          ) {
+            lower.pop();
+          }
+          lower.push(p);
+        }
+        let upper = [];
+        for (let i = points.length - 1; i >= 0; i--) {
+          let p = points[i];
+          while (
+            upper.length >= 2 &&
+            cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0
+          ) {
+            upper.pop();
+          }
+          upper.push(p);
+        }
+        lower.pop();
+        upper.pop();
+        return lower.concat(upper);
+      }
+      function cross(o, a, b) {
+        return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+      }
+
+      // -------------------------------
+      // Render loop
+      function animate() {
+        requestAnimationFrame(animate);
+        renderer.render(scene, camera);
+      }
+    </script>
+  </body>
+</html>

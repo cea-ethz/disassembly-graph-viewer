@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Hackathon Overview: Connection Detection in IFC Viewer</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f9f9f9;
+      margin: 0;
+      padding: 2rem;
+      color: #333;
+      line-height: 1.6;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: #fff;
+      padding: 2rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      border-radius: 4px;
+    }
+    h1, h2, h3 {
+      color: #2c3e50;
+    }
+    h1 {
+      border-bottom: 2px solid #2c3e50;
+      padding-bottom: 0.5rem;
+    }
+    ul {
+      margin-left: 1.5rem;
+    }
+    code {
+      background: #eef;
+      padding: 0 4px;
+      border-radius: 3px;
+    }
+    .section {
+      margin-bottom: 2rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="section">
+      <h2>1. Collecting Candidate Elements</h2>
+      <p>
+        The process starts by traversing all loaded models to gather candidate elements. Only objects whose names start with <code>Element_</code> and that have an associated <code>expressID</code> are selected. This filtering ensures that we focus on the elements representing real building parts.
+      </p>
+    </div>
+
+    <div class="section">
+      <h2>2. Pairwise Comparison &amp; Intersection Testing</h2>
+      <p>
+        With the candidate elements collected, the system compares every pair of elements. For each pair, it calls a function (named <code>findIntersection</code>) to determine whether the two elements are in contact.
+      </p>
+      <p>
+        The heavy lifting is performed by a specialized component called the <strong>FastIntersectionDetector</strong>, which efficiently tests for spatial intersections.
+      </p>
+    </div>
+
+    <div class="section">
+      <h2>3. Fast Intersection Detector</h2>
+      <p>
+        The <strong>FastIntersectionDetector</strong> works in two main stages:
+      </p>
+      <ul>
+        <li>
+          <strong>Bounding Box Check:</strong> It computes axis‐aligned bounding boxes for each element and checks if they intersect. Even if the boxes do not directly intersect, it checks whether the centers are within a 5 mm tolerance.
+        </li>
+        <li>
+          <strong>Raycasting:</strong> If the bounding boxes indicate potential contact, the detector samples vertices (up to about 100 points) from one element. For each vertex, it casts rays in six principal directions (±X, ±Y, ±Z) using Three.js’s <code>Raycaster</code>. If a ray intersects the other element within a short distance (around 1 cm), that intersection point is recorded.
+        </li>
+      </ul>
+      <p>
+        Finally, the detector deduplicates these intersection points using a 1 mm tolerance, ensuring that nearby points are merged.
+      </p>
+    </div>
+
+    <div class="section">
+      <h2>4. Classifying the Connection</h2>
+      <p>
+        With a set of deduplicated intersection points, the connection is classified into one of three types:
+      </p>
+      <ul>
+        <li>
+          <strong>Point Connection:</strong> When only one unique intersection point is found or the two furthest points are extremely close.
+        </li>
+        <li>
+          <strong>Line Connection:</strong> When the intersection points lie nearly along a straight line. A line geometry is created between the two most distant points, and its length is computed.
+        </li>
+        <li>
+          <strong>Surface Connection:</strong> When the points are spread over an area. For example, if exactly four points are found, they can be ordered to form a rectangle and triangulated to create a surface mesh. The area of contact is then calculated.
+        </li>
+      </ul>
+      <p>
+        The resulting connection object includes a unique ID (typically a combination of the two elements’ <code>expressID</code>s), the connection type, measurements (like length or area), and geometry (buffer geometries for visualization).
+      </p>
+    </div>
+
+    <div class="section">
+      <h2>5. Storing, Visualizing, and UI Integration</h2>
+      <p>
+        Each connection is stored in a map keyed by its unique ID. The system also updates mappings so that each element “knows” its connections. An <strong>IntersectionVisualizer</strong> then creates 3D visual representations (points, lines, or surfaces) for each connection.
+      </p>
+      <p>
+        The UI displays a list of connections and provides options to export the data as CSV or in IFC5 format. This makes the tool ideal for hackathon scenarios where rapid feedback and data export are critical.
+      </p>
+    </div>
+  </div>
+</body>
+</html>

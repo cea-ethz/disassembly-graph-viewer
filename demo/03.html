@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Hackathon – Find the Connection</title>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+        background: #111;
+      }
+      canvas {
+        display: block;
+      }
+      #info {
+        position: absolute;
+        top: 15px;
+        left: 15px;
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+        font-size: 20px;
+        color: #eee;
+        z-index: 10;
+      }
+    </style>
+    <!-- Import Three.js from ES modules CDN -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="info">Intersection Visualization: find the connection*</div>
+    <!-- Only include GSAP from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.5/gsap.min.js"></script>
+    <!-- Main script as module to use ES imports -->
+    <script type="module">
+      import * as THREE from "three";
+
+      let scene, camera, renderer, controlsGroup;
+      const OUTLINE_COLOR = 0xffffff; // white outline
+      const INTERSECT_COLOR = 0xffaa00; // glowing orange for intersections
+
+      // Make THREE available globally if needed by other scripts
+      window.THREE = THREE;
+
+      init();
+      animate();
+
+      // Helper function: Adds an outline to a mesh using its EdgesGeometry.
+      function addOutline(mesh, color = OUTLINE_COLOR, linewidth = 2) {
+        const geo = new THREE.EdgesGeometry(mesh.geometry);
+        const mat = new THREE.LineBasicMaterial({
+          color: color,
+          linewidth: linewidth,
+        });
+        const outline = new THREE.LineSegments(geo, mat);
+        // Slightly scale up the outline mesh so it's visible over the object.
+        outline.scale.multiplyScalar(1.001);
+        mesh.add(outline);
+      }
+
+      function init() {
+        // Create scene and camera.
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x111111);
+        camera = new THREE.PerspectiveCamera(
+          45,
+          window.innerWidth / window.innerHeight,
+          0.1,
+          100
+        );
+        camera.position.set(12, 12, 20);
+        camera.lookAt(0, 0, 0);
+
+        // Renderer.
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Lighting.
+        const ambient = new THREE.AmbientLight(0xffffff, 0.4);
+        scene.add(ambient);
+        const directional = new THREE.DirectionalLight(0xffffff, 1);
+        directional.position.set(10, 20, 10);
+        scene.add(directional);
+
+        // --- Create the base geometry ---
+        // Floor: a large plane.
+        const floorGeom = new THREE.BoxGeometry(20, 0.1, 20);
+        const floorMat = new THREE.MeshStandardMaterial({
+          color: 0x4444aa,
+          roughness: 0.5,
+          metalness: 0.1,
+        });
+        const floor = new THREE.Mesh(floorGeom, floorMat);
+        floor.position.set(0, 0, 0);
+        scene.add(floor);
+        addOutline(floor);
+
+        // Back wall.
+        const wallBackGeom = new THREE.BoxGeometry(20, 5, 0.1);
+        const wallMat = new THREE.MeshStandardMaterial({
+          color: 0xaa4444,
+          roughness: 0.5,
+          metalness: 0.1,
+        });
+        const wallBack = new THREE.Mesh(wallBackGeom, wallMat);
+        wallBack.position.set(0, 2.5, -10);
+        scene.add(wallBack);
+        addOutline(wallBack);
+
+        // Left wall.
+        const wallLeftGeom = new THREE.BoxGeometry(0.1, 5, 20);
+        const wallLeft = new THREE.Mesh(wallLeftGeom, wallMat);
+        wallLeft.position.set(-10, 2.5, 0);
+        scene.add(wallLeft);
+        addOutline(wallLeft);
+
+        // Inner wall – added to showcase the surface connection algorithm.
+        // This wall is placed within the scene; its bottom face (a rectangle) is in full contact with the floor.
+        const innerWallGeom = new THREE.BoxGeometry(5, 0.5, 0.5);
+        // Use a distinct color for the inner wall.
+        const innerWallMat = new THREE.MeshStandardMaterial({
+          color: 0x55aa55,
+          roughness: 0.5,
+          metalness: 0.1,
+        });
+        // Position so that its bottom face is flush with the floor.
+        // (Since the geometry is centered, shift up by half its height to have y=0 at the bottom.)
+        const innerWall = new THREE.Mesh(innerWallGeom, innerWallMat);
+        innerWall.position.set(0, 0.25, 5);
+        scene.add(innerWall);
+        addOutline(innerWall);
+
+        // Group for holding intersection visualizations.
+        controlsGroup = new THREE.Group();
+        scene.add(controlsGroup);
+
+        window.addEventListener("resize", onWindowResize, false);
+
+        // Begin the animation sequence after a short delay.
+        gsap.delayedCall(1, animateSequence);
+      }
+
+      function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+
+      // Main GSAP timeline for camera and connection animations.
+      function animateSequence() {
+        const tl = gsap.timeline({
+          defaults: { duration: 2, ease: "power2.inOut" },
+        });
+
+        // Step 1: Zoom into the triple intersection corner (where floor, wallLeft, and wallBack meet)
+        tl.to(
+          camera.position,
+          { x: -12, y: 8, z: -12, onUpdate: updateCameraLookAt },
+          0
+        ).to({}, { duration: 1 }); // Pause
+
+        // Display the Triple Intersection (Point Connection)
+        tl.add(() => {
+          showTripleIntersection();
+        }, "-=0.5");
+        tl.to({}, { duration: 2 });
+
+        // Step 2: Pan to highlight the linear connection along the floor–back wall edge.
+        tl.to(
+          camera.position,
+          { x: 0, y: 5, z: -20, onUpdate: updateCameraLookAt },
+          "+=0.5"
+        ).to({}, { duration: 1 });
+        tl.add(() => {
+          showLinearConnection();
+        }, "-=0.5");
+        tl.to({}, { duration: 2 });
+
+        // Step 3: Pan to show the surface connection along the inner wall–floor contact.
+        tl.to(
+          camera.position,
+          { x: 0, y: 5, z: 10, onUpdate: updateCameraLookAt },
+          "+=0.5"
+        ).to({}, { duration: 1 });
+        tl.add(() => {
+          showSurfaceConnection();
+        }, "-=0.5");
+        tl.to({}, { duration: 2 });
+
+        // Step 4: Zoom back out to view the entire scene.
+        tl.to(
+          camera.position,
+          { x: 12, y: 12, z: 20, onUpdate: updateCameraLookAt },
+          "+=0.5"
+        );
+      }
+
+      function updateCameraLookAt() {
+        camera.lookAt(new THREE.Vector3(0, 0, 0));
+      }
+
+      // ------------- Intersection Visualizations --------------
+
+      // Triple Intersection (Point Connection) at the common corner (-10,0,-10)
+      function showTripleIntersection() {
+        clearIntersections();
+        const group = new THREE.Group();
+        controlsGroup.add(group);
+        const base = new THREE.Vector3(-10, 0, -10);
+
+        // Animate several sample points (with minimal noise) around the corner.
+        for (let i = 0; i < 12; i++) {
+          const noise = new THREE.Vector3(
+            (Math.random() - 0.5) * 0.003,
+            (Math.random() - 0.5) * 0.003,
+            (Math.random() - 0.5) * 0.003
+          );
+          const pt = base.clone().add(noise);
+          const sampleGeom = new THREE.SphereGeometry(0.08, 16, 16);
+          const sampleMat = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0,
+          });
+          const sample = new THREE.Mesh(sampleGeom, sampleMat);
+          sample.position.copy(pt);
+          group.add(sample);
+          gsap.to(sample.material, {
+            opacity: 1,
+            duration: 0.5,
+            delay: i * 0.05,
+          });
+        }
+        // Merge the points into a single glowing sphere.
+        const sphereGeom = new THREE.SphereGeometry(0.4, 32, 32);
+        const sphereMat = new THREE.MeshBasicMaterial({
+          color: INTERSECT_COLOR,
+          transparent: true,
+          opacity: 0,
+        });
+        const sphere = new THREE.Mesh(sphereGeom, sphereMat);
+        sphere.position.copy(base);
+        group.add(sphere);
+        gsap.to(sphere.material, { opacity: 1, duration: 1, delay: 0.8 });
+      }
+
+      // Linear Connection – along the floor–back wall edge.
+      function showLinearConnection() {
+        clearIntersections();
+        const group = new THREE.Group();
+        controlsGroup.add(group);
+
+        // Define the edge: along the floor and back wall intersection.
+        const start = new THREE.Vector3(-10, 0, -10);
+        const end = new THREE.Vector3(10, 0, -10);
+        const numSamples = 15;
+        const points = [];
+        for (let i = 0; i < numSamples; i++) {
+          const t = i / (numSamples - 1);
+          const pt = new THREE.Vector3().lerpVectors(start, end, t);
+          points.push(pt);
+          const sampleGeom = new THREE.SphereGeometry(0.08, 16, 16);
+          const sampleMat = new THREE.MeshBasicMaterial({
+            color: 0x00ff00,
+            transparent: true,
+            opacity: 0,
+          });
+          const sample = new THREE.Mesh(sampleGeom, sampleMat);
+          sample.position.copy(pt);
+          group.add(sample);
+          gsap.to(sample.material, {
+            opacity: 1,
+            duration: 0.3,
+            delay: i * 0.05,
+          });
+        }
+        // Connect the extreme points with a glowing line.
+        gsap.delayedCall(1.5, () => {
+          const lineGeom = new THREE.BufferGeometry().setFromPoints([
+            start,
+            end,
+          ]);
+          const lineMat = new THREE.LineBasicMaterial({
+            color: 0xff00ff,
+            transparent: true,
+            opacity: 0,
+            linewidth: 4,
+          });
+          const line = new THREE.Line(lineGeom, lineMat);
+          group.add(line);
+          gsap.to(line.material, { opacity: 1, duration: 1 });
+        });
+      }
+
+      // Surface Connection – along the inner wall–floor contact.
+      // Here we simulate a contact area on the bottom face of the inner wall.
+      function showSurfaceConnection() {
+        clearIntersections();
+        const group = new THREE.Group();
+        controlsGroup.add(group);
+
+        // The inner wall (created in init) is a 5×0.5×0.5 box positioned at (0, 0.25, 5).
+        // Its bottom face (contact with the floor) spans:
+        //   x: from -2.5 to 2.5 and z: from 5 - 0.25 to 5 + 0.25, at y = 0.
+        const center = new THREE.Vector3(0, 0, 5);
+        const halfWidth = 2.5;
+        const halfDepth = 0.25;
+        const numSamples = 25;
+        const points = [];
+        for (let i = 0; i < numSamples; i++) {
+          const x = THREE.MathUtils.randFloat(
+            center.x - halfWidth,
+            center.x + halfWidth
+          );
+          const z = THREE.MathUtils.randFloat(
+            center.z - halfDepth,
+            center.z + halfDepth
+          );
+          const pt = new THREE.Vector3(x, 0, z); // y is 0 (floor)
+          points.push(pt);
+          const sampleGeom = new THREE.SphereGeometry(0.07, 16, 16);
+          const sampleMat = new THREE.MeshBasicMaterial({
+            color: 0x00ffff,
+            transparent: true,
+            opacity: 0,
+          });
+          const sample = new THREE.Mesh(sampleGeom, sampleMat);
+          sample.position.copy(pt);
+          group.add(sample);
+          gsap.to(sample.material, {
+            opacity: 1,
+            duration: 0.4,
+            delay: i * 0.03,
+          });
+        }
+
+        // Compute a simple 2D convex hull from these points.
+        // For the inner wall contact, we treat x as x and use z as the y-coordinate for hull computation.
+        let points2D = points.map((pt) => ({ x: pt.x, y: pt.z, orig: pt }));
+        let hull2D = computeConvexHull2D(points2D);
+        if (hull2D.length < 3) return;
+        // Convert hull points back to 3D: x and z come from hull, y is 0.
+        const hull3D = hull2D.map((p) => new THREE.Vector3(p.x, 0, p.y));
+        // Build a triangle fan from the convex hull.
+        const vertices = [];
+        const indices = [];
+        const centerHull = hull3D[0];
+        vertices.push(centerHull.x, centerHull.y, centerHull.z);
+        for (let i = 0; i < hull3D.length; i++) {
+          const pt = hull3D[i];
+          vertices.push(pt.x, pt.y, pt.z);
+          if (i > 0) {
+            indices.push(0, i, (i + 1) % hull3D.length || 1);
+          }
+        }
+        const surfaceGeom = new THREE.BufferGeometry();
+        surfaceGeom.setAttribute(
+          "position",
+          new THREE.Float32BufferAttribute(vertices, 3)
+        );
+        surfaceGeom.setIndex(indices);
+        surfaceGeom.computeVertexNormals();
+        const surfaceMat = new THREE.MeshPhongMaterial({
+          color: 0x8800ff,
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.0,
+        });
+        const surfaceMesh = new THREE.Mesh(surfaceGeom, surfaceMat);
+        group.add(surfaceMesh);
+        gsap.to(surfaceMesh.material, { opacity: 0.7, duration: 1, delay: 1 });
+      }
+
+      // Utility: Clear previous intersection visuals.
+      function clearIntersections() {
+        while (controlsGroup.children.length > 0) {
+          const child = controlsGroup.children[0];
+          controlsGroup.remove(child);
+        }
+      }
+
+      // Simple 2D convex hull algorithm (Andrew's Monotone Chain).
+      function computeConvexHull2D(points) {
+        if (points.length <= 1) return points.slice();
+        points.sort((a, b) => (a.x === b.x ? a.y - b.y : a.x - b.x));
+        let lower = [];
+        for (let p of points) {
+          while (
+            lower.length >= 2 &&
+            cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0
+          ) {
+            lower.pop();
+          }
+          lower.push(p);
+        }
+        let upper = [];
+        for (let i = points.length - 1; i >= 0; i--) {
+          let p = points[i];
+          while (
+            upper.length >= 2 &&
+            cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0
+          ) {
+            upper.pop();
+          }
+          upper.push(p);
+        }
+        lower.pop();
+        upper.pop();
+        return lower.concat(upper);
+      }
+      function cross(o, a, b) {
+        return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+      }
+
+      // Render loop.
+      function animate() {
+        requestAnimationFrame(animate);
+        renderer.render(scene, camera);
+      }
+    </script>
+  </body>
+</html>

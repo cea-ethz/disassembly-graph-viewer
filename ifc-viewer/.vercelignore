@@ -1,0 +1,9 @@
+.git
+node_modules
+.env
+*.log
+.eslintrc*
+.prettier*
+README.md
+*.test.ts
+*.spec.ts 
