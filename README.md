@@ -14,3 +14,5 @@ PORT=3001
 
 3. In one terminal window: Go to `/api` and install all packages by running `npm install`, then start the server by running `node server.js`
 4. In another terminal window: Go to `ifc-viewer` and install all packages by running `npm install`, then run the frontend by running `npm run dev`
+
+![Case study implementation](data/IfcNeo4j-Viewer_case-study4.png)
